@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/dp_detector" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
