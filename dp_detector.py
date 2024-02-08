@@ -24,8 +24,19 @@
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
+from qgis.core import QgsMapLayerProxyModel
 # Initialize Qt resources from file resources.py
 from .resources import *
+from ultralytics import YOLO  # Ensure this import is at the top if used in multiple methods
+import json
+from qgis.core import (
+    QgsProject, QgsGeometry, QgsFeature, QgsVectorLayer,
+    QgsField, QgsMapLayerRegistry, QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform, QgsPointXY, QgsFields, QgsFeature)
+from PyQt5.QtCore import QVariant
+from qgis.PyQt.QtGui import QColor
+from qgis.utils import iface
+
 
 # Import the code for the DockWidget
 from .dp_detector_dockwidget import DrypatchDockWidget
@@ -210,30 +221,95 @@ class Drypatch:
 
     def run(self):
         """Run method that loads and starts the plugin"""
-
         if not self.pluginIsActive:
             self.pluginIsActive = True
 
-            #print "** STARTING Drypatch"
-
-            # dockwidget may not exist if:
-            #    first run of plugin
-            #    removed on close (see self.onClosePlugin method)
             if self.dockwidget == None:
-                # Create the dockwidget (after translation) and keep reference
                 self.dockwidget = DrypatchDockWidget()
+                self.setupDockWidget()
 
-            # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
-
-            # show the dockwidget
-            # TODO: fix to allow choice of dock location
             self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
 
+    def setupDockWidget(self):
+        """Set up the dock widget with necessary connections and initializations."""
+        # Populate the layer combo box with raster layers
+        self.dockwidget.layerComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
+        self.dockwidget.layerComboBox.setLayer(self.iface.activeLayer())
 
-from ultralytics import YOLO
+        # Connect the Browse button for selecting YOLO model path
+        self.dockwidget.browseButton.clicked.connect(self.dockwidget.selectModelPath)
+        
+        self.detectButton.clicked.connect(self.performDetection)
 
-model = YOLO("Path to the model")
-result = model("Path to the raster layer or whatever is the data source")
+    def performDetection(self):
+        modelPath = self.modelPathLineEdit.text()  # Assuming you have a QLineEdit for model path
+        selectedLayerName = self.layerComboBox.currentText()
+        selectedLayer = next((layer for layer in QgsProject.instance().mapLayers().values() if layer.name() == selectedLayerName), None)
+
+        if not selectedLayer:
+            QtWidgets.QMessageBox.warning(self, "Error", "Selected layer not found.")
+            return
+
+        if not os.path.exists(modelPath):
+            QtWidgets.QMessageBox.warning(self, "Error", "Model path does not exist.")
+            return
+
+        # Assuming the selectedLayer is a raster layer and its source is the path to the raster file
+        rasterPath = selectedLayer.source()
+
+        self.detectObjects(modelPath, rasterPath)
+
+    def detectObjects(self, modelPath, rasterPath):
+
+        model = YOLO(modelPath)
+        result = model(rasterPath)
+        pre = json.loads(result.tojson())
+
+        # Create a new memory layer for bounding boxes
+        vl = QgsVectorLayer("Polygon?crs=epsg:3857", "Detected Objects", "memory")
+        pr = vl.dataProvider()
+
+        # Define the fields of the layer
+        pr.addAttributes([
+            QgsField("id", QVariant.Int),
+            QgsField("confidence", QVariant.Double)
+        ])
+        vl.updateFields()
+
+        for idx, item in enumerate(pre):
+            box = item.get("box")
+            confidence = item.get("confidence", 0)  # Assuming confidence is part of your result
+            # Create a polygon from the bounding box
+            x1, y1 = box.get("x1"), box.get("y1")
+            x2, y2 = box.get("x2"), box.get("y2")
+
+            # Assuming these coordinates are in EPSG:4326 and need to be transformed to EPSG:3857
+            sourceCrs = QgsCoordinateReferenceSystem(4326)
+            destCrs = QgsCoordinateReferenceSystem(3857)
+            transform = QgsCoordinateTransform(sourceCrs, destCrs, QgsProject.instance())
+
+            # Transform the points
+            pt1 = transform.transform(QgsPointXY(x1, y1))
+            pt2 = transform.transform(QgsPointXY(x2, y2))
+
+            # Create a rectangular polygon
+            poly = QgsGeometry.fromRect(QgsRectangle(pt1, pt2))
+
+            # Create a new feature and set its geometry and attributes
+            fet = QgsFeature()
+            fet.setGeometry(poly)
+            fet.setAttributes([idx, confidence])
+            pr.addFeature(fet)
+
+        vl.updateExtents()
+
+        # Add the layer to the Layers panel
+        QgsProject.instance().addMapLayer(vl)
+
+        # Optionally, zoom to the layer's extent
+        iface.mapCanvas().setExtent(vl.extent())
+        iface.mapCanvas().refresh()
+            
 
