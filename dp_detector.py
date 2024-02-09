@@ -21,26 +21,32 @@
  *                                                                         *
  ***************************************************************************/
 """
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, Qt
+import logging
+import traceback
+
+from qgis.PyQt.QtCore import QCoreApplication, Qt
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction
-from qgis.core import QgsMapLayerProxyModel
-# Initialize Qt resources from file resources.py
-from .resources import *
-from ultralytics import YOLO  # Ensure this import is at the top if used in multiple methods
-import json
-from qgis.core import (
-    QgsProject, QgsGeometry, QgsFeature, QgsVectorLayer,
-    QgsField, QgsMapLayerRegistry, QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform, QgsPointXY, QgsFields, QgsFeature)
-from PyQt5.QtCore import QVariant
-from qgis.PyQt.QtGui import QColor
-from qgis.utils import iface
+from qgis.PyQt.QtWidgets import QMessageBox
+from qgis.core import Qgis
+from qgis.core import QgsApplication
+from qgis.core import QgsProject
+from qgis.core import QgsVectorLayer
+from qgis.gui import QgisInterface
 
+from deepness.common.defines import PLUGIN_NAME, IS_DEBUG
+from deepness.common.lazy_package_loader import LazyPackageLoader
+from deepness.common.processing_parameters.map_processing_parameters import MapProcessingParameters, ProcessedAreaType
+from deepness.common.processing_parameters.training_data_export_parameters import TrainingDataExportParameters
 
 # Import the code for the DockWidget
 from .dp_detector_dockwidget import DrypatchDockWidget
 import os.path
+
+from deepness.processing.map_processor.map_processing_result import MapProcessingResult, MapProcessingResultFailed, \
+    MapProcessingResultCanceled, MapProcessingResultSuccess
+from deepness.processing.map_processor.map_processor_training_data_export import MapProcessorTrainingDataExport
+from deepness.processing.models.model_types import ModelDefinition
 
 
 class Drypatch:
@@ -83,6 +89,7 @@ class Drypatch:
 
         self.pluginIsActive = False
         self.dockwidget = None
+        self._map_processor = None
 
 
     # noinspection PyMethodMayBeStatic
@@ -224,92 +231,126 @@ class Drypatch:
         if not self.pluginIsActive:
             self.pluginIsActive = True
 
-            if self.dockwidget == None:
-                self.dockwidget = DrypatchDockWidget()
-                self.setupDockWidget()
+            if self.dockwidget is None:
+#self.dockwidget = DrypatchDockWidget()
+                #self.setupDockWidget()
+            # Create the dockwidget (after translation) and keep reference
+                self.dockwidget = DrypatchDockWidget(self.iface)
+                self._layers_changed(None)
+                QgsProject.instance().layersAdded.connect(self._layers_changed)
+                QgsProject.instance().layersRemoved.connect(self._layers_changed)
 
+            #self.dockwidget.closingPlugin.connect(self.onClosePlugin)
+            #self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
+            #self.dockwidget.show()
+            # connect to provide cleanup on closing of dockwidget
             self.dockwidget.closingPlugin.connect(self.onClosePlugin)
-            self.iface.addDockWidget(Qt.LeftDockWidgetArea, self.dockwidget)
+            self.dockwidget.run_model_inference_signal.connect(self._run_model_inference)
+            self.dockwidget.run_training_data_export_signal.connect(self._run_training_data_export)
+
+            self.iface.addDockWidget(Qt.RightDockWidgetArea, self.dockwidget)
             self.dockwidget.show()
 
-    def setupDockWidget(self):
-        """Set up the dock widget with necessary connections and initializations."""
-        # Populate the layer combo box with raster layers
-        self.dockwidget.layerComboBox.setFilters(QgsMapLayerProxyModel.RasterLayer)
-        self.dockwidget.layerComboBox.setLayer(self.iface.activeLayer())
+    
+    def _are_map_processing_parameters_are_correct(self, params: MapProcessingParameters):
+        if self._map_processor and self._map_processor.is_busy():
+            msg = "Error! Processing already in progress! Please wait or cancel previous task."
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Critical, duration=7)
+            return False
 
-        # Connect the Browse button for selecting YOLO model path
-        self.dockwidget.browseButton.clicked.connect(self.dockwidget.selectModelPath)
-        
-        self.detectButton.clicked.connect(self.performDetection)
+        rlayer = QgsProject.instance().mapLayers()[params.input_layer_id]
+        if rlayer is None:
+            msg = "Error! Please select the layer to process first!"
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Critical, duration=7)
+            return False
 
-    def performDetection(self):
-        modelPath = self.modelPathLineEdit.text()  # Assuming you have a QLineEdit for model path
-        selectedLayerName = self.layerComboBox.currentText()
-        selectedLayer = next((layer for layer in QgsProject.instance().mapLayers().values() if layer.name() == selectedLayerName), None)
+        if isinstance(rlayer, QgsVectorLayer):
+            msg = "Error! Please select a raster layer (vector layer selected)"
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Critical, duration=7)
+            return False
 
-        if not selectedLayer:
-            QtWidgets.QMessageBox.warning(self, "Error", "Selected layer not found.")
+        return True
+
+    def _display_processing_started_info(self):
+        msg = "Processing in progress... Cool! It's tea time!"
+        self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Info, duration=2)
+
+    def _run_training_data_export(self, training_data_export_parameters: TrainingDataExportParameters):
+        if not self._are_map_processing_parameters_are_correct(training_data_export_parameters):
             return
 
-        if not os.path.exists(modelPath):
-            QtWidgets.QMessageBox.warning(self, "Error", "Model path does not exist.")
+        vlayer = None
+
+        rlayer = QgsProject.instance().mapLayers()[training_data_export_parameters.input_layer_id]
+        if training_data_export_parameters.processed_area_type == ProcessedAreaType.FROM_POLYGONS:
+            vlayer = QgsProject.instance().mapLayers()[training_data_export_parameters.mask_layer_id]
+
+        self._map_processor = MapProcessorTrainingDataExport(
+            rlayer=rlayer,
+            vlayer_mask=vlayer,  # layer with masks
+            map_canvas=self.iface.mapCanvas(),
+            params=training_data_export_parameters)
+        self._map_processor.finished_signal.connect(self._map_processor_finished)
+        self._map_processor.show_img_signal.connect(self._show_img)
+        QgsApplication.taskManager().addTask(self._map_processor)
+        self._display_processing_started_info()
+
+    def _run_model_inference(self, params: MapProcessingParameters):
+        if not self._are_map_processing_parameters_are_correct(params):
             return
 
-        # Assuming the selectedLayer is a raster layer and its source is the path to the raster file
-        rasterPath = selectedLayer.source()
+        vlayer = None
 
-        self.detectObjects(modelPath, rasterPath)
+        rlayer = QgsProject.instance().mapLayers()[params.input_layer_id]
+        if params.processed_area_type == ProcessedAreaType.FROM_POLYGONS:
+            vlayer = QgsProject.instance().mapLayers()[params.mask_layer_id]
 
-    def detectObjects(self, modelPath, rasterPath):
+        model_definition = ModelDefinition.get_definition_for_params(params)
+        map_processor_class = model_definition.map_processor_class
 
-        model = YOLO(modelPath)
-        result = model(rasterPath)
-        pre = json.loads(result.tojson())
+        self._map_processor = map_processor_class(
+            rlayer=rlayer,
+            vlayer_mask=vlayer,
+            map_canvas=self.iface.mapCanvas(),
+            params=params)
+        self._map_processor.finished_signal.connect(self._map_processor_finished)
+        self._map_processor.show_img_signal.connect(self._show_img)
+        QgsApplication.taskManager().addTask(self._map_processor)
+        self._display_processing_started_info()
 
-        # Create a new memory layer for bounding boxes
-        vl = QgsVectorLayer("Polygon?crs=epsg:3857", "Detected Objects", "memory")
-        pr = vl.dataProvider()
+    @staticmethod
+    def _show_img(img_rgb, window_name: str):
+        """ Helper function to show an image while developing and debugging the plugin """
+        # We are importing it here, because it is debug tool,
+        # and we don't want to have it in the main scope from the project startup
+        img_bgr = img_rgb[..., ::-1]
+        cv2.namedWindow(window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(window_name, 800, 800)
+        cv2.imshow(window_name, img_bgr)
+        cv2.waitKey(1)
 
-        # Define the fields of the layer
-        pr.addAttributes([
-            QgsField("id", QVariant.Int),
-            QgsField("confidence", QVariant.Double)
-        ])
-        vl.updateFields()
-
-        for idx, item in enumerate(pre):
-            box = item.get("box")
-            confidence = item.get("confidence", 0)  # Assuming confidence is part of your result
-            # Create a polygon from the bounding box
-            x1, y1 = box.get("x1"), box.get("y1")
-            x2, y2 = box.get("x2"), box.get("y2")
-
-            # Assuming these coordinates are in EPSG:4326 and need to be transformed to EPSG:3857
-            sourceCrs = QgsCoordinateReferenceSystem(4326)
-            destCrs = QgsCoordinateReferenceSystem(3857)
-            transform = QgsCoordinateTransform(sourceCrs, destCrs, QgsProject.instance())
-
-            # Transform the points
-            pt1 = transform.transform(QgsPointXY(x1, y1))
-            pt2 = transform.transform(QgsPointXY(x2, y2))
-
-            # Create a rectangular polygon
-            poly = QgsGeometry.fromRect(QgsRectangle(pt1, pt2))
-
-            # Create a new feature and set its geometry and attributes
-            fet = QgsFeature()
-            fet.setGeometry(poly)
-            fet.setAttributes([idx, confidence])
-            pr.addFeature(fet)
-
-        vl.updateExtents()
-
-        # Add the layer to the Layers panel
-        QgsProject.instance().addMapLayer(vl)
-
-        # Optionally, zoom to the layer's extent
-        iface.mapCanvas().setExtent(vl.extent())
-        iface.mapCanvas().refresh()
+    def _map_processor_finished(self, result: MapProcessingResult):
+        """ Slot for finished processing of the ortophoto """
+        if isinstance(result, MapProcessingResultFailed):
+            msg = f'Error! Processing error: "{result.message}"!'
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Critical, duration=14)
+            if result.exception is not None:
+                logging.error(msg)
+                trace = '\n'.join(traceback.format_tb(result.exception.__traceback__)[-1:])
+                msg = f'{msg}\n\n\n' \
+                      f'Details: ' \
+                      f'{str(result.exception.__class__.__name__)} - {result.exception}\n' \
+                      f'Last Traceback: \n' \
+                      f'{trace}'
+                QMessageBox.critical(self.dockwidget, "Unhandled exception", msg)
+        elif isinstance(result, MapProcessingResultCanceled):
+            msg = f'Info! Processing canceled by user!'
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Info, duration=7)
+        elif isinstance(result, MapProcessingResultSuccess):
+            msg = 'Processing finished!'
+            self.iface.messageBar().pushMessage(PLUGIN_NAME, msg, level=Qgis.Success, duration=3)
+            message_to_show = result.message
+            QMessageBox.information(self.dockwidget, "Processing Result", message_to_show)
+        self._map_processor = None
             
 
