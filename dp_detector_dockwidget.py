@@ -33,27 +33,27 @@ from qgis.PyQt import QtWidgets, uic
 from qgis.PyQt.QtCore import pyqtSignal
 from qgis.PyQt.QtWidgets import QComboBox, QFileDialog, QMessageBox
 
-from deepness.common.config_entry_key import ConfigEntryKey
-from deepness.common.defines import IS_DEBUG, PLUGIN_NAME
-from deepness.common.errors import OperationFailedException
-from deepness.common.processing_overlap import ProcessingOverlap, ProcessingOverlapOptions
-from deepness.common.processing_parameters.detection_parameters import DetectionParameters, DetectorType
-from deepness.common.processing_parameters.map_processing_parameters import (MapProcessingParameters, ModelOutputFormat,
+from dp_detector.common.config_entry_key import ConfigEntryKey
+from dp_detector.common.defines import IS_DEBUG, PLUGIN_NAME
+from dp_detector.common.errors import OperationFailedException
+from dp_detector.common.processing_overlap import ProcessingOverlap, ProcessingOverlapOptions
+from dp_detector.common.processing_parameters.detection_parameters import DetectionParameters, DetectorType
+from dp_detector.common.processing_parameters.map_processing_parameters import (MapProcessingParameters, ModelOutputFormat,
                                                                              ProcessedAreaType)
-#from deepness.common.processing_parameters.regression_parameters import RegressionParameters
-#from deepness.common.processing_parameters.segmentation_parameters import SegmentationParameters
-#from deepness.common.processing_parameters.superresolution_parameters import SuperresolutionParameters
-from deepness.common.processing_parameters.training_data_export_parameters import TrainingDataExportParameters
-from deepness.processing.models.detector import Detector
-from deepness.processing.models.model_base import ModelBase
-from deepness.processing.models.model_types import ModelDefinition, ModelType
-from deepness.widgets.input_channels_mapping.input_channels_mapping_widget import InputChannelsMappingWidget
-from deepness.widgets.training_data_export_widget.training_data_export_widget import TrainingDataExportWidget
+#from dp_detector.common.processing_parameters.regression_parameters import RegressionParameters
+#from dp_detector.common.processing_parameters.segmentation_parameters import SegmentationParameters
+#from dp_detector.common.processing_parameters.superresolution_parameters import SuperresolutionParameters
+from dp_detector.common.processing_parameters.training_data_export_parameters import TrainingDataExportParameters
+from dp_detector.processing.models.detector import Detector
+from dp_detector.processing.models.model_base import ModelBase
+from dp_detector.processing.models.model_types import ModelDefinition, ModelType
+from dp_detector.widgets.input_channels_mapping.input_channels_mapping_widget import InputChannelsMappingWidget
+from dp_detector.widgets.training_data_export_widget.training_data_export_widget import TrainingDataExportWidget
 
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), 'dp_detector_dockwidget_base.ui'))
 
-class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
+class DryPatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     closingPlugin = pyqtSignal()
     run_model_inference_signal = pyqtSignal(MapProcessingParameters)  
     run_training_data_export_signal = pyqtSignal(TrainingDataExportParameters)
@@ -71,9 +71,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self._setup_misc_ui()
         self._load_ui_from_config()
 
-    def _show_debug_warning(self):
-        """ Show label with warning if we are running debug mode """
-        self.label_debugModeWarning.setVisible(IS_DEBUG)
 
     def _load_ui_from_config(self):
         """ Load the UI values from the project configuration
@@ -109,18 +106,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             self.doubleSpinBox_resolution_cm_px.setValue(ConfigEntryKey.PREPROCESSING_RESOLUTION.get())
             self.spinBox_processingTileOverlapPercentage.setValue(ConfigEntryKey.PREPROCESSING_TILES_OVERLAP.get())
 
-            self.doubleSpinBox_probabilityThreshold.setValue(
-                ConfigEntryKey.SEGMENTATION_PROBABILITY_THRESHOLD_VALUE.get())
-            self.checkBox_pixelClassEnableThreshold.setChecked(
-                ConfigEntryKey.SEGMENTATION_PROBABILITY_THRESHOLD_ENABLED.get())
-            self._set_probability_threshold_enabled()
-            self.spinBox_dilateErodeSize.setValue(
-                ConfigEntryKey.SEGMENTATION_REMOVE_SMALL_SEGMENT_SIZE.get())
-            self.checkBox_removeSmallAreas.setChecked(
-                ConfigEntryKey.SEGMENTATION_REMOVE_SMALL_SEGMENT_ENABLED.get())
-            self._set_remove_small_segment_enabled()
-
-            self.doubleSpinBox_regressionScaling.setValue(ConfigEntryKey.REGRESSION_OUTPUT_SCALING.get())
 
             self.doubleSpinBox_confidence.setValue(ConfigEntryKey.DETECTION_CONFIDENCE.get())
             self.doubleSpinBox_iouScore.setValue(ConfigEntryKey.DETECTION_IOU.get())
@@ -144,15 +129,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         ConfigEntryKey.PREPROCESSING_RESOLUTION.set(self.doubleSpinBox_resolution_cm_px.value())
         ConfigEntryKey.PREPROCESSING_TILES_OVERLAP.set(self.spinBox_processingTileOverlapPercentage.value())
 
-        ConfigEntryKey.SEGMENTATION_PROBABILITY_THRESHOLD_ENABLED.set(
-            self.checkBox_pixelClassEnableThreshold.isChecked())
-        ConfigEntryKey.SEGMENTATION_PROBABILITY_THRESHOLD_VALUE.set(self.doubleSpinBox_probabilityThreshold.value())
-        ConfigEntryKey.SEGMENTATION_REMOVE_SMALL_SEGMENT_ENABLED.set(
-            self.checkBox_removeSmallAreas.isChecked())
-        ConfigEntryKey.SEGMENTATION_REMOVE_SMALL_SEGMENT_SIZE.set(self.spinBox_dilateErodeSize.value())
-
-        ConfigEntryKey.REGRESSION_OUTPUT_SCALING.set(self.doubleSpinBox_regressionScaling.value())
-
         ConfigEntryKey.DETECTION_CONFIDENCE.set(self.doubleSpinBox_confidence.value())
         ConfigEntryKey.DETECTION_IOU.set(self.doubleSpinBox_iouScore.value())
         ConfigEntryKey.DETECTION_REMOVE_OVERLAPPING.set(self.checkBox_removeOverlappingDetections.isChecked())
@@ -167,7 +143,7 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
     def _setup_misc_ui(self):
         """ Setup some misceleounous ui forms
         """
-        self._show_debug_warning()
+        
         combobox = self.comboBox_processedAreaSelection
         for name in ProcessedAreaType.get_all_names():
             combobox.addItem(name)
@@ -213,8 +189,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         self.pushButton_reloadModel.clicked.connect(self._load_model_and_display_info)
         self.pushButton_loadDefaultModelParameters.clicked.connect(self._load_default_model_parameters)
         self.mMapLayerComboBox_inputLayer.layerChanged.connect(self._rlayer_updated)
-        self.checkBox_pixelClassEnableThreshold.stateChanged.connect(self._set_probability_threshold_enabled)
-        self.checkBox_removeSmallAreas.stateChanged.connect(self._set_remove_small_segment_enabled)
         self.comboBox_modelOutputFormat.currentIndexChanged.connect(self._model_output_format_changed)
         self.radioButton_processingTileOverlapPercentage.toggled.connect(self._set_processing_overlap_enabled)
         self.radioButton_processingTileOverlapPixels.toggled.connect(self._set_processing_overlap_enabled)
@@ -237,11 +211,10 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             superresolution_enabled = True
         else:
             raise Exception(f"Unsupported model type ({model_type})!")
-
-        self.mGroupBox_segmentationParameters.setEnabled(segmentation_enabled)
+        detection_enabled = False
+        
         self.mGroupBox_detectionParameters.setEnabled(detection_enabled)
-        self.mGroupBox_regressionParameters.setEnabled(regression_enabled)
-        self.mGroupBox_superresolutionParameters.setEnabled(superresolution_enabled)
+    
 
     def _detector_type_changed(self):
         detector_type = DetectorType(self.comboBox_detectorType.currentText())
@@ -262,9 +235,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
     def _set_probability_threshold_enabled(self):
         self.doubleSpinBox_probabilityThreshold.setEnabled(self.checkBox_pixelClassEnableThreshold.isChecked())
-
-    def _set_remove_small_segment_enabled(self):
-        self.spinBox_dilateErodeSize.setEnabled(self.checkBox_removeSmallAreas.isChecked())
 
     def _browse_model_path(self):
         file_path, _ = QFileDialog.getOpenFileName(
@@ -300,20 +270,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
         value = self._model.get_detector_type()
         if value is not None:
             self.comboBox_detectorType.setCurrentText(value)
-
-        value = self._model.get_metadata_segmentation_threshold()
-        if value is not None:
-            self.checkBox_pixelClassEnableThreshold.setChecked(bool(value != 0))
-            self.doubleSpinBox_probabilityThreshold.setValue(value)
-
-        value = self._model.get_metadata_segmentation_small_segment()
-        if value is not None:
-            self.checkBox_removeSmallAreas.setChecked(bool(value != 0))
-            self.spinBox_dilateErodeSize.setValue(value)
-
-        value = self._model.get_metadata_regression_output_scaling()
-        if value is not None:
-            self.doubleSpinBox_regressionScaling.setValue(value)
 
         value = self._model.get_metadata_detection_confidence()
         if value is not None:
@@ -356,40 +312,20 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
 
         txt = ''
 
-        try:
-            model_definition = self.get_selected_model_class_definition()
-            model_class = model_definition.model_class
-            self._model = self._load_model_with_type_from_metadata(
-                model_class_from_ui=model_class,
-                file_path=file_path)
-            self._model.check_loaded_model_outputs()
-            input_0_shape = self._model.get_input_shape()
-            txt += f'Input shape: {input_0_shape}   =   [BATCH_SIZE * CHANNELS * SIZE * SIZE]'
-            input_size_px = input_0_shape[-1]
+        model_definition = self.get_selected_model_class_definition()
+        model_class = model_definition.model_class
+        self._model = self._load_model_with_type_from_metadata(
+            model_class_from_ui=model_class,
+            file_path=file_path)
+        self._model.check_loaded_model_outputs()
+        input_0_shape = self._model.get_input_shape()
+        txt += f'Input shape: {input_0_shape}   =   [BATCH_SIZE * CHANNELS * SIZE * SIZE]'
+        input_size_px = input_0_shape[-1]
 
-            # TODO idk how variable input will be handled
-            self.spinBox_tileSize_px.setValue(input_size_px)
-            self.spinBox_tileSize_px.setEnabled(False)
-            self._input_channels_mapping_widget.set_model(self._model)
-
-            # super resolution
-            if model_class == ModelType.SUPERRESOLUTION:
-                output_0_shape = self._model.get_output_shape()
-                scale_factor = output_0_shape[-1] / input_size_px
-                self.doubleSpinBox_superresolutionScaleFactor.setValue(int(scale_factor))
-        except Exception as e:
-            if IS_DEBUG:
-                raise e
-            txt = "Error! Failed to load the model!\n" \
-                  "Model may be not usable."
-            logging.exception(txt)
-            self.spinBox_tileSize_px.setEnabled(True)
-            length_limit = 300
-            exception_msg = (str(e)[:length_limit] + '..') if len(str(e)) > length_limit else str(e)
-            msg = txt + f'\n\nException: {exception_msg}'
-            QMessageBox.critical(self, "Error!", msg)
-
-        self.label_modelInfo.setText(txt)
+        #Handling the input
+        self.spinBox_tileSize_px.setValue(input_size_px)
+        self.spinBox_tileSize_px.setEnabled(False)
+        self._input_channels_mapping_widget.set_model(self._model)
 
         if isinstance(self._model, Detector):
             detector_type = DetectorType(self.comboBox_detectorType.currentText())
@@ -462,47 +398,8 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             raise OperationFailedException("Please select and load a model first!")
 
         model_type = self.get_selected_model_class_definition().model_type
-        if model_type == ModelType.SEGMENTATION:
-            params = self.get_segmentation_parameters(map_processing_parameters)
-        elif model_type == ModelType.REGRESSION:
-            params = self.get_regression_parameters(map_processing_parameters)
-        elif model_type == ModelType.SUPERRESOLUTION:
-            params = self.get_superresolution_parameters(map_processing_parameters)
-        elif model_type == ModelType.DETECTION:
+        if model_type == ModelType.DETECTION:
             params = self.get_detection_parameters(map_processing_parameters)
-
-        else:
-            raise Exception(f"Unknown model type '{model_type}'!")
-
-        return params
-
-    def get_segmentation_parameters(self, map_processing_parameters: MapProcessingParameters) -> SegmentationParameters:
-        postprocessing_dilate_erode_size = self.spinBox_dilateErodeSize.value() \
-            if self.checkBox_removeSmallAreas.isChecked() else 0
-
-        params = SegmentationParameters(
-            **map_processing_parameters.__dict__,
-            postprocessing_dilate_erode_size=postprocessing_dilate_erode_size,
-            pixel_classification__probability_threshold=self._get_pixel_classification_threshold(),
-            model=self._model,
-        )
-        return params
-
-    def get_regression_parameters(self, map_processing_parameters: MapProcessingParameters) -> RegressionParameters:
-        params = RegressionParameters(
-            **map_processing_parameters.__dict__,
-            output_scaling=self.doubleSpinBox_regressionScaling.value(),
-            model=self._model,
-        )
-        return params
-
-    def get_superresolution_parameters(self, map_processing_parameters: MapProcessingParameters) -> SuperresolutionParameters:
-        params = SuperresolutionParameters(
-            **map_processing_parameters.__dict__,
-            model=self._model,
-            scale_factor=self.doubleSpinBox_superresolutionScaleFactor.value(),
-            output_scaling=self.doubleSpinBox_superresolutionScaling.value(),
-        )
         return params
 
     def get_detection_parameters(self, map_processing_parameters: MapProcessingParameters) -> DetectionParameters:
@@ -563,8 +460,6 @@ class DrypatchDockWidget(QtWidgets.QDockWidget, FORM_CLASS):
             if not map_processing_parameters.input_layer_id:
                 raise OperationFailedException("Please select an input layer first!")
 
-            # Overwrite common parameter - we don't want channels mapping as for the model,
-            # but just to take all channels
             training_data_export_parameters.input_channels_mapping = \
                 self._input_channels_mapping_widget.get_channels_mapping_for_training_data_export()
         except OperationFailedException as e:

@@ -34,19 +34,19 @@ from qgis.core import QgsProject
 from qgis.core import QgsVectorLayer
 from qgis.gui import QgisInterface
 
-from deepness.common.defines import PLUGIN_NAME, IS_DEBUG
-from deepness.common.lazy_package_loader import LazyPackageLoader
-from deepness.common.processing_parameters.map_processing_parameters import MapProcessingParameters, ProcessedAreaType
-from deepness.common.processing_parameters.training_data_export_parameters import TrainingDataExportParameters
+from dp_detector.common.defines import PLUGIN_NAME, IS_DEBUG
+from dp_detector.common.lazy_package_loader import LazyPackageLoader
+from dp_detector.common.processing_parameters.map_processing_parameters import MapProcessingParameters, ProcessedAreaType
+from dp_detector.common.processing_parameters.training_data_export_parameters import TrainingDataExportParameters
 
 # Import the code for the DockWidget
-from .dp_detector_dockwidget import DrypatchDockWidget
+from .dp_detector_dockwidget import DryPatchDockWidget
 import os.path
 
-from deepness.processing.map_processor.map_processing_result import MapProcessingResult, MapProcessingResultFailed, \
+from dp_detector.processing.map_processor.map_processing_result import MapProcessingResult, MapProcessingResultFailed, \
     MapProcessingResultCanceled, MapProcessingResultSuccess
-from deepness.processing.map_processor.map_processor_training_data_export import MapProcessorTrainingDataExport
-from deepness.processing.models.model_types import ModelDefinition
+from dp_detector.processing.map_processor.map_processor_training_data_export import MapProcessorTrainingDataExport
+from dp_detector.processing.models.model_types import ModelDefinition
 
 
 class Drypatch:
@@ -62,21 +62,6 @@ class Drypatch:
         """
         # Save reference to the QGIS interface
         self.iface = iface
-
-        # initialize plugin directory
-        self.plugin_dir = os.path.dirname(__file__)
-
-        # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir,
-            'i18n',
-            'Drypatch_{}.qm'.format(locale))
-
-        if os.path.exists(locale_path):
-            self.translator = QTranslator()
-            self.translator.load(locale_path)
-            QCoreApplication.installTranslator(self.translator)
 
         # Declare instance attributes
         self.actions = []
@@ -226,16 +211,18 @@ class Drypatch:
 
     #--------------------------------------------------------------------------
 
+    def _layers_changed(self, _):
+        pass
+
     def run(self):
         """Run method that loads and starts the plugin"""
         if not self.pluginIsActive:
             self.pluginIsActive = True
 
             if self.dockwidget is None:
-#self.dockwidget = DrypatchDockWidget()
-                #self.setupDockWidget()
+                self.dockwidget = DryPatchDockWidget(self.iface)
             # Create the dockwidget (after translation) and keep reference
-                self.dockwidget = DrypatchDockWidget(self.iface)
+                #self.dockwidget = DryPatchDockWidget(self.iface)
                 self._layers_changed(None)
                 QgsProject.instance().layersAdded.connect(self._layers_changed)
                 QgsProject.instance().layersRemoved.connect(self._layers_changed)

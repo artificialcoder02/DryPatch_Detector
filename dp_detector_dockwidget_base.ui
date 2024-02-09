@@ -2,7 +2,7 @@
 <ui version="4.0">
  <class>DrypatchDockWidgetBase</class>
  <widget class="QDockWidget" name="DrypatchDockWidgetBase">
-  <property name="geometry">
+    <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
@@ -11,13 +11,10 @@
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Dry Patch Detector</string>
+   <string>DryPatchDetector</string>
   </property>
   <widget class="QWidget" name="dockWidgetContents">
    <layout class="QGridLayout" name="gridLayout">
-    <item row="1" column="0">
-     <layout class="QVBoxLayout" name="verticalLayout"/>
-    </item>
     <item row="0" column="0">
      <widget class="QScrollArea" name="scrollArea">
       <property name="widgetResizable">
@@ -54,10 +51,24 @@
            <string>Input data:</string>
           </property>
           <layout class="QGridLayout" name="gridLayout_5">
+           <item row="0" column="1" colspan="2">
+            <widget class="QgsMapLayerComboBox" name="mMapLayerComboBox_inputLayer">
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Layer which will be processed.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Most probably this is your ortophoto or map source (like satellite image from google earth).&lt;br/&gt;Needs to be a raster layer.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+            </widget>
+           </item>
            <item row="1" column="1" colspan="2">
             <widget class="QComboBox" name="comboBox_processedAreaSelection">
              <property name="toolTip">
               <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Defines what part of the &amp;quot;Input layer&amp;quot; should be processed.&lt;/p&gt;&lt;p&gt;&lt;br/&gt; - &amp;quot;&lt;span style=&quot; font-style:italic;&quot;&gt;Visible Part&lt;/span&gt;&amp;quot; allows to process the part currently visible on the map canvas.&lt;br/&gt; - &amp;quot;&lt;span style=&quot; font-style:italic;&quot;&gt;Entire Layer&lt;/span&gt;&amp;quot; allows to process the entire ortophoto file&lt;br/&gt; - &amp;quot;&lt;span style=&quot; font-style:italic;&quot;&gt;From Polygons&lt;/span&gt;&amp;quot; allows to select a polygon describing the area to be processed (e.g. if the processed field is a polygon, and we don't want to process outside of it)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0">
+            <widget class="QLabel" name="label_10">
+             <property name="text">
+              <string>Input layer:</string>
              </property>
             </widget>
            </item>
@@ -72,20 +83,6 @@
             <widget class="QLabel" name="label_areaMaskLayer">
              <property name="text">
               <string>Area mask layer:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="0">
-            <widget class="QLabel" name="label_10">
-             <property name="text">
-              <string>Input layer:</string>
-             </property>
-            </widget>
-           </item>
-           <item row="0" column="1" colspan="2">
-            <widget class="QgsMapLayerComboBox" name="mMapLayerComboBox_inputLayer">
-             <property name="toolTip">
-              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;Layer which will be processed.&lt;/span&gt;&lt;/p&gt;&lt;p&gt;Most probably this is your ortophoto or map source (like satellite image from google earth).&lt;br/&gt;Needs to be a raster layer.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
              </property>
             </widget>
            </item>
@@ -394,6 +391,106 @@ for some models</string>
          </widget>
         </item>
         <item>
+         <widget class="QgsCollapsibleGroupBox" name="mGroupBox_detectionParameters">
+          <property name="title">
+           <string>Detection parameters</string>
+          </property>
+          <layout class="QGridLayout" name="gridLayout_9">
+           <item row="5" column="0">
+            <widget class="QLabel" name="label_22">
+             <property name="text">
+              <string>IoU threshold:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="0">
+            <widget class="QLabel" name="label_16">
+             <property name="text">
+              <string>Detector type:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="1" column="1">
+            <widget class="QComboBox" name="comboBox_detectorType"/>
+           </item>
+           <item row="5" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBox_iouScore">
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Parameter used in Non Maximum Suppression in post processing.&lt;/p&gt;&lt;p&gt;Defines the threshold of overlap between to neighbouring detections, to consider them as the same object.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="decimals">
+              <number>2</number>
+             </property>
+             <property name="maximum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.050000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="0" column="0" colspan="2">
+            <widget class="QLabel" name="label_20">
+             <property name="font">
+              <font>
+               <weight>75</weight>
+               <bold>true</bold>
+              </font>
+             </property>
+             <property name="text">
+              <string>NOTE: Applicable only if a detection model is used</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="0">
+            <widget class="QLabel" name="label_21">
+             <property name="text">
+              <string>Confidence:</string>
+             </property>
+            </widget>
+           </item>
+           <item row="3" column="1">
+            <widget class="QDoubleSpinBox" name="doubleSpinBox_confidence">
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Minimal confidence of the potential detection, to consider it as a detection.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="decimals">
+              <number>2</number>
+             </property>
+             <property name="maximum">
+              <double>1.000000000000000</double>
+             </property>
+             <property name="singleStep">
+              <double>0.050000000000000</double>
+             </property>
+            </widget>
+           </item>
+           <item row="2" column="0" colspan="2">
+            <widget class="QLabel" name="label_detectorTypeDescription">
+             <property name="font">
+              <font>
+               <pointsize>9</pointsize>
+              </font>
+             </property>
+             <property name="text">
+              <string>Here goes a longer description of detector type...</string>
+             </property>
+            </widget>
+           </item>
+           <item row="6" column="0" colspan="2">
+            <widget class="QCheckBox" name="checkBox_removeOverlappingDetections">
+             <property name="toolTip">
+              <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If checked then the overlapping detections (which may be a artifact of overlapped processing) will be removed&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+             </property>
+             <property name="text">
+              <string>Remove overlapping detections</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item>
          <widget class="QgsCollapsibleGroupBox" name="mGroupBox_6">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Preferred" vsizetype="Maximum">
@@ -539,6 +636,9 @@ number:</string>
        </layout>
       </widget>
      </widget>
+    </item>
+    <item row="1" column="0">
+     <layout class="QVBoxLayout" name="verticalLayout"/>
     </item>
    </layout>
   </widget>
