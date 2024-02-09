@@ -6,9 +6,9 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
-from deepness.common.processing_parameters.detection_parameters import DetectorType
-from deepness.processing.models.model_base import ModelBase
-from deepness.processing.processing_utils import BoundingBox
+from dp_detector.common.processing_parameters.detection_parameters import DetectorType
+from dp_detector.processing.models.model_base import ModelBase
+from dp_detector.processing.processing_utils import BoundingBox
 
 
 @dataclass

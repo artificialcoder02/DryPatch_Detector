@@ -8,8 +8,8 @@ from typing import Optional, Tuple
 import numpy as np
 from qgis.core import QgsRectangle
 
-from deepness.common.lazy_package_loader import LazyPackageLoader
-from deepness.common.processing_parameters.map_processing_parameters import MapProcessingParameters
+from dp_detector.common.lazy_package_loader import LazyPackageLoader
+from dp_detector.common.processing_parameters.map_processing_parameters import MapProcessingParameters
 
 cv2 = LazyPackageLoader('cv2')
 

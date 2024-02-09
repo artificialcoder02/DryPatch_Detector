@@ -8,10 +8,10 @@ from qgis.core import QgsRectangle
 from qgis.core import QgsVectorLayer
 from qgis.gui import QgsMapCanvas
 
-from deepness.common.errors import OperationFailedException
-from deepness.common.processing_parameters.map_processing_parameters import ProcessedAreaType, \
+from dp_detector.common.errors import OperationFailedException
+from dp_detector.common.processing_parameters.map_processing_parameters import ProcessedAreaType, \
     MapProcessingParameters
-from deepness.processing.processing_utils import BoundingBox, convert_meters_to_rlayer_units
+from dp_detector.processing.processing_utils import BoundingBox, convert_meters_to_rlayer_units
 
 
 def round_extent_to_rlayer_grid(extent: QgsRectangle, rlayer: QgsRasterLayer) -> QgsRectangle:

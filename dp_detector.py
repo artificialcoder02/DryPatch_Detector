@@ -173,7 +173,7 @@ class Drypatch:
         icon_path = ':/plugins/dp_detector/icon.png'
         self.add_action(
             icon_path,
-            text=self.tr(u''),
+            text=self.tr(u'DryPatchDetector'),
             callback=self.run,
             parent=self.iface.mainWindow())
 

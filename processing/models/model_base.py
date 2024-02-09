@@ -5,7 +5,7 @@ from typing import List, Optional
 
 import numpy as np
 
-from deepness.common.lazy_package_loader import LazyPackageLoader
+from dp_detector.common.lazy_package_loader import LazyPackageLoader
 
 ort = LazyPackageLoader('onnxruntime')
 

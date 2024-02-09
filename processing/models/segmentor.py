@@ -4,7 +4,7 @@ from typing import List
 
 import numpy as np
 
-from deepness.processing.models.model_base import ModelBase
+from dp_detector.processing.models.model_base import ModelBase
 
 
 class Segmentor(ModelBase):
